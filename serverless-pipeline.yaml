@@ -1,0 +1,391 @@
+--- 
+AWSTemplateFormatVersion: 2010-09-09
+Parameters: 
+  GitHubToken: 
+    Description: "GitHub Oauth token"
+    Type: String
+  RepositoryName: 
+    Default: frontend
+    Description: "GitHub repository name"
+    Type: String
+  RepositoryOwnerName: 
+    Default: github_user
+    Description: "GitHub user"
+    Type: String
+  ServiceName: 
+    Default: Frontend
+    Description: "Name for the service, used in the Lambda function and pipeline names"
+    Type: String
+Resources: 
+  BuildArtifactsBucket: 
+    Type: "AWS::S3::Bucket"
+  CFNPipelinePolicy: 
+    Properties: 
+      Description: "CloudFormation Pipeline Execution Policy"
+      Path: /
+      PolicyDocument: 
+        Statement: 
+          Action: 
+            - "cloudformation:CreateStack"
+            - "cloudformation:DescribeStacks"
+            - "cloudformation:DeleteStack"
+            - "cloudformation:UpdateStack"
+            - "cloudformation:CreateChangeSet"
+            - "cloudformation:ExecuteChangeSet"
+            - "cloudformation:DeleteChangeSet"
+            - "cloudformation:DescribeChangeSet"
+            - "cloudformation:SetStackPolicy"
+            - "cloudformation:SetStackPolicy"
+            - "cloudformation:ValidateTemplate"
+            - "codebuild:StartBuild"
+            - "codebuild:BatchGetBuilds"
+          Effect: Allow
+          Resource: "*"
+        Version: "2012-10-17"
+    Type: "AWS::IAM::ManagedPolicy"
+  CloudFormationExecutionRole: 
+    Properties: 
+      AssumeRolePolicyDocument: 
+        Statement: 
+          Action: 
+            - "sts:AssumeRole"
+          Effect: Allow
+          Principal: 
+            Service: 
+              - cloudformation.amazonaws.com
+        Version: "2012-10-17"
+      ManagedPolicyArns: 
+        - "arn:aws:iam::aws:policy/AdministratorAccess"
+      Path: /
+    Type: "AWS::IAM::Role"
+  CodeBuildBetaProject: 
+    Properties: 
+      Artifacts: 
+        Type: CODEPIPELINE
+      Environment: 
+        ComputeType: BUILD_GENERAL1_SMALL
+        EnvironmentVariables: 
+          - 
+            Name: BUILD_OUTPUT_BUCKET
+            Value: BuildArtifactsBucket
+          - 
+            Name: STAGE
+            Value: Beta
+        Image: "aws/codebuild/nodejs:6.3.1"
+        Type: LINUX_CONTAINER
+      Name: "${ServiceName}_beta_build"
+      ServiceRole: CodeBuildServiceRole.Arn
+      Source: 
+        Type: CODEPIPELINE
+    Type: "AWS::CodeBuild::Project"
+  CodeBuildGammaProject: 
+    Properties: 
+      Artifacts: 
+        Type: CODEPIPELINE
+      Environment: 
+        ComputeType: BUILD_GENERAL1_SMALL
+        EnvironmentVariables: 
+          - 
+            Name: BUILD_OUTPUT_BUCKET
+            Value: BuildArtifactsBucket
+          - 
+            Name: STAGE
+            Value: Beta
+        Image: "aws/codebuild/nodejs:6.3.1"
+        Type: LINUX_CONTAINER
+      Name: "${ServiceName}_gamma_build"
+      ServiceRole: CodeBuildServiceRole.Arn
+      Source: 
+        Type: CODEPIPELINE
+    Type: "AWS::CodeBuild::Project"
+  CodeBuildProdProject: 
+    Properties: 
+      Artifacts: 
+        Type: CODEPIPELINE
+      Environment: 
+        ComputeType: BUILD_GENERAL1_SMALL
+        EnvironmentVariables: 
+          - 
+            Name: BUILD_OUTPUT_BUCKET
+            Value: BuildArtifactsBucket
+          - 
+            Name: STAGE
+            Value: Prod
+        Image: "aws/codebuild/nodejs:6.3.1"
+        Type: LINUX_CONTAINER
+      Name: "${ServiceName}_prod_build"
+      ServiceRole: CodeBuildServiceRole.Arn
+      Source: 
+        Type: CODEPIPELINE
+    Type: "AWS::CodeBuild::Project"
+  CodeBuildServiceRole: 
+    Properties: 
+      AssumeRolePolicyDocument: 
+        Statement: 
+          - 
+            Action: 
+              - "sts:AssumeRole"
+            Effect: Allow
+            Principal: 
+              Service: 
+                - codebuild.amazonaws.com
+        Version: "2012-10-17"
+      Path: /
+      Policies: 
+        - 
+          PolicyDocument: 
+            Statement: 
+              - 
+                Action: 
+                  - "logs:CreateLogGroup"
+                  - "logs:CreateLogStream"
+                  - "logs:PutLogEvents"
+                Effect: Allow
+                Resource: 
+                  - "arn:aws:logs:${AWS::Region}:${AWS::AccountId}:log-group:/aws/codebuild/*"
+              - 
+                Action: 
+                  - "s3:GetObject"
+                  - "s3:GetObjectVersion"
+                  - "s3:PutObject"
+                Effect: Allow
+                Resource: 
+                  - "arn:aws:s3:::${BuildArtifactsBucket}/*"
+              - 
+                Action: 
+                  - "cloudformation:DescribeStacks"
+                Effect: Allow
+                Resource: "*"
+            Version: "2012-10-17"
+          PolicyName: CodeBuildAccess
+    Type: "AWS::IAM::Role"
+  Pipeline: 
+    Properties: 
+      ArtifactStore: 
+        Location: BuildArtifactsBucket
+        Type: S3
+      Name: "${ServiceName}_pipeline"
+      RoleArn: PipelineExecutionRole.Arn
+      Stages: 
+        - 
+          Actions: 
+            - 
+              ActionTypeId: 
+                Category: Source
+                Owner: ThirdParty
+                Provider: GitHub
+                Version: 1
+              Configuration: 
+                Branch: master
+                OAuthToken: GitHubToken
+                Owner: RepositoryOwnerName
+                Repo: RepositoryName
+              Name: GitHubRepo
+              OutputArtifacts: 
+                - 
+                  Name: SourceZip
+              RunOrder: 1
+          Name: Source
+        - 
+          Actions: 
+            - 
+              ActionTypeId: 
+                Category: Build
+                Owner: AWS
+                Provider: CodeBuild
+                Version: 1
+              Configuration: 
+                ProjectName: CodeBuildBetaProject
+              InputArtifacts: 
+                - 
+                  Name: SourceZip
+              Name: CodeBuild
+              OutputArtifacts: 
+                - 
+                  Name: BetaBuiltZip
+              RunOrder: 1
+            - 
+              ActionTypeId: 
+                Category: Deploy
+                Owner: AWS
+                Provider: CloudFormation
+                Version: 1
+              Configuration: 
+                ActionMode: CHANGE_SET_REPLACE
+                Capabilities: CAPABILITY_IAM
+                ChangeSetName: "${ServiceName}-ChangeSet-Beta"
+                ParameterOverrides: "{ \"SourceBucket\" : { \"Fn::GetArtifactAtt\" : [\"BetaBuiltZip\", \"BucketName\"]}, \"SourceArtifact\" : { \"Fn::GetArtifactAtt\" : [\"BetaBuiltZip\", \"ObjectKey\"]} }"
+                RoleArn: CloudFormationExecutionRole.Arn
+                StackName: "${ServiceName}-Stack-Beta"
+                TemplatePath: "BetaBuiltZip::app-output_sam.yaml"
+              InputArtifacts: 
+                - 
+                  Name: BetaBuiltZip
+              Name: CreateChangeSet
+              RunOrder: 2
+            - 
+              ActionTypeId: 
+                Category: Deploy
+                Owner: AWS
+                Provider: CloudFormation
+                Version: 1
+              Configuration: 
+                ActionMode: CHANGE_SET_EXECUTE
+                ChangeSetName: "${ServiceName}-ChangeSet-Beta"
+                RoleArn: CloudFormationExecutionRole.Arn
+                StackName: "${ServiceName}-Stack-Beta"
+              Name: ExecuteChangeSet
+              OutputArtifacts: 
+                - 
+                  Name: "${ServiceName}BetaChangeSet"
+              RunOrder: 3
+          Name: Beta
+        - 
+          Actions: 
+            - 
+              ActionTypeId: 
+                Category: Build
+                Owner: AWS
+                Provider: CodeBuild
+                Version: 1
+              Configuration: 
+                ProjectName: CodeBuildGammaProject
+              InputArtifacts: 
+                - 
+                  Name: SourceZip
+              Name: CodeBuild
+              OutputArtifacts: 
+                - 
+                  Name: GammaBuiltZip
+              RunOrder: 1
+            - 
+              ActionTypeId: 
+                Category: Deploy
+                Owner: AWS
+                Provider: CloudFormation
+                Version: 1
+              Configuration: 
+                ActionMode: CHANGE_SET_REPLACE
+                Capabilities: CAPABILITY_IAM
+                ChangeSetName: "${ServiceName}-ChangeSet-Gamma"
+                ParameterOverrides: "{ \"SourceBucket\" : { \"Fn::GetArtifactAtt\" : [\"GammaBuiltZip\", \"BucketName\"]}, \"SourceArtifact\" : { \"Fn::GetArtifactAtt\" : [\"GammaBuiltZip\", \"ObjectKey\"]} }"
+                RoleArn: CloudFormationExecutionRole.Arn
+                StackName: "${ServiceName}-Stack-Gamma"
+                TemplatePath: "GammaBuiltZip::app-output_sam.yaml"
+              InputArtifacts: 
+                - 
+                  Name: GammaBuiltZip
+              Name: CreateChangeSet
+              RunOrder: 2
+            - 
+              ActionTypeId: 
+                Category: Deploy
+                Owner: AWS
+                Provider: CloudFormation
+                Version: 1
+              Configuration: 
+                ActionMode: CHANGE_SET_EXECUTE
+                ChangeSetName: "${ServiceName}-ChangeSet-Gamma"
+                RoleArn: CloudFormationExecutionRole.Arn
+                StackName: "${ServiceName}-Stack-Gamma"
+              Name: ExecuteChangeSet
+              OutputArtifacts: 
+                - 
+                  Name: "${ServiceName}GammaChangeSet"
+              RunOrder: 3
+          Name: Gamma
+        - 
+          Actions: 
+            - 
+              ActionTypeId: 
+                Category: Approval
+                Owner: AWS
+                Provider: Manual
+                Version: 1
+              Name: DeploymentApproval
+              RunOrder: 1
+            - 
+              ActionTypeId: 
+                Category: Build
+                Owner: AWS
+                Provider: CodeBuild
+                Version: 1
+              Configuration: 
+                ProjectName: CodeBuildProdProject
+              InputArtifacts: 
+                - 
+                  Name: SourceZip
+              Name: CodeBuild
+              OutputArtifacts: 
+                - 
+                  Name: ProdBuiltZip
+              RunOrder: 2
+            - 
+              ActionTypeId: 
+                Category: Deploy
+                Owner: AWS
+                Provider: CloudFormation
+                Version: 1
+              Configuration: 
+                ActionMode: CHANGE_SET_REPLACE
+                Capabilities: CAPABILITY_IAM
+                ChangeSetName: "${ServiceName}-ChangeSet-Prod"
+                ParameterOverrides: "{ \"SourceBucket\" : { \"Fn::GetArtifactAtt\" : [\"ProdBuiltZip\", \"BucketName\"]}, \"SourceArtifact\" : { \"Fn::GetArtifactAtt\" : [\"ProdBuiltZip\", \"ObjectKey\"]} }"
+                RoleArn: CloudFormationExecutionRole.Arn
+                StackName: "${ServiceName}-Stack-Prod"
+                TemplatePath: "ProdBuiltZip::app-output_sam.yaml"
+              InputArtifacts: 
+                - 
+                  Name: ProdBuiltZip
+              Name: CreateChangeSet
+              RunOrder: 3
+            - 
+              ActionTypeId: 
+                Category: Deploy
+                Owner: AWS
+                Provider: CloudFormation
+                Version: 1
+              Configuration: 
+                ActionMode: CHANGE_SET_EXECUTE
+                ChangeSetName: "${ServiceName}-ChangeSet-Prod"
+                RoleArn: CloudFormationExecutionRole.Arn
+                StackName: "${ServiceName}-Stack-Prod"
+              Name: ExecuteChangeSet
+              OutputArtifacts: 
+                - 
+                  Name: "${ServiceName}ProdChangeSet"
+              RunOrder: 4
+          Name: Prod
+    Type: "AWS::CodePipeline::Pipeline"
+  PipelineExecutionRole: 
+    Properties: 
+      AssumeRolePolicyDocument: 
+        Statement: 
+          - 
+            Action: 
+              - "sts:AssumeRole"
+            Effect: Allow
+            Principal: 
+              Service: 
+                - codepipeline.amazonaws.com
+        Version: "2012-10-17"
+      ManagedPolicyArns: 
+        - "arn:aws:iam::aws:policy/AWSCodeCommitFullAccess"
+        - "arn:aws:iam::aws:policy/AmazonS3FullAccess"
+        - CFNPipelinePolicy
+      Path: /
+      Policies: 
+        - 
+          PolicyDocument: 
+            Statement: 
+              - 
+                Action: 
+                  - "iam:PassRole"
+                  - "lambda:InvokeFunction"
+                  - "lambda:ListFunctions"
+                  - "lambda:InvokeAsyc"
+                Effect: Allow
+                Resource: "*"
+            Version: "2012-10-17"
+          PolicyName: CodePipelineAccess
+    Type: "AWS::IAM::Role"
