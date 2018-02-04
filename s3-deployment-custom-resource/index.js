@@ -136,7 +136,7 @@ exports.handler = (event, context, callback) => {
                         Key           : entry.entryName,
                         ContentLength : fileData.length,
                         Body          : fileData,
-                        ContentType   : mime.lookup(fileName)
+                        ContentType   : mime.getType(fileName)
                     }
 
                     s3.putObject(s3FileProperties, function(err, data) {
