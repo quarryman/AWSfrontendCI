@@ -3,8 +3,8 @@ version: 0.1
 phases:
   install:
     commands:
+      - cd $CODEBUILD_SRC_DIR; npm install aws-sdk --save
       - cd $CODEBUILD_SRC_DIR; npm install
-      - cd $CODEBUILD_SRC_DIR; npm install aws-sdk -g
       - cd $CODEBUILD_SRC_DIR/s3-deployment-custom-resource; npm install
   pre_build:
     commands:
