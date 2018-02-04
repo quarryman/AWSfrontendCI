@@ -90,7 +90,7 @@ Resources:
             Value: BuildArtifactsBucket
           - 
             Name: STAGE
-            Value: Beta
+            Value: Gamma
         Image: "aws/codebuild/nodejs:6.3.1"
         Type: LINUX_CONTAINER
       Name: "${ServiceName}_gamma_build"
