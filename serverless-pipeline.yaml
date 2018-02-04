@@ -67,14 +67,14 @@ Resources:
         EnvironmentVariables: 
           - 
             Name: BUILD_OUTPUT_BUCKET
-            Value: BuildArtifactsBucket
+            Value: !Ref BuildArtifactsBucket
           - 
             Name: STAGE
             Value: Beta
         Image: "aws/codebuild/nodejs:6.3.1"
         Type: LINUX_CONTAINER
-      Name: "${ServiceName}_beta_build"
-      ServiceRole: CodeBuildServiceRole.Arn
+      Name: !Sub '${ServiceName}_beta_build'
+      ServiceRole: !GetAtt CodeBuildServiceRole.Arn
       Source: 
         Type: CODEPIPELINE
     Type: "AWS::CodeBuild::Project"
@@ -87,14 +87,14 @@ Resources:
         EnvironmentVariables: 
           - 
             Name: BUILD_OUTPUT_BUCKET
-            Value: BuildArtifactsBucket
+            Value: !Ref BuildArtifactsBucket
           - 
             Name: STAGE
             Value: Gamma
         Image: "aws/codebuild/nodejs:6.3.1"
         Type: LINUX_CONTAINER
-      Name: "${ServiceName}_gamma_build"
-      ServiceRole: CodeBuildServiceRole.Arn
+      Name: !Sub '${ServiceName}_gamma_build'
+      ServiceRole: !GetAtt CodeBuildServiceRole.Arn
       Source: 
         Type: CODEPIPELINE
     Type: "AWS::CodeBuild::Project"
@@ -107,14 +107,14 @@ Resources:
         EnvironmentVariables: 
           - 
             Name: BUILD_OUTPUT_BUCKET
-            Value: BuildArtifactsBucket
+            Value: !Ref BuildArtifactsBucket
           - 
             Name: STAGE
             Value: Prod
         Image: "aws/codebuild/nodejs:6.3.1"
         Type: LINUX_CONTAINER
-      Name: "${ServiceName}_prod_build"
-      ServiceRole: CodeBuildServiceRole.Arn
+      Name: !Sub '${ServiceName}_prod_build'
+      ServiceRole: !GetAtt CodeBuildServiceRole.Arn
       Source: 
         Type: CODEPIPELINE
     Type: "AWS::CodeBuild::Project"
@@ -142,7 +142,7 @@ Resources:
                   - "logs:PutLogEvents"
                 Effect: Allow
                 Resource: 
-                  - "arn:aws:logs:${AWS::Region}:${AWS::AccountId}:log-group:/aws/codebuild/*"
+                  - !Sub 'arn:aws:logs:${AWS::Region}:${AWS::AccountId}:log-group:/aws/codebuild/*'
               - 
                 Action: 
                   - "s3:GetObject"
@@ -150,7 +150,7 @@ Resources:
                   - "s3:PutObject"
                 Effect: Allow
                 Resource: 
-                  - "arn:aws:s3:::${BuildArtifactsBucket}/*"
+                  - !Sub 'arn:aws:s3:::${BuildArtifactsBucket}/*'
               - 
                 Action: 
                   - "cloudformation:DescribeStacks"
@@ -162,10 +162,10 @@ Resources:
   Pipeline: 
     Properties: 
       ArtifactStore: 
-        Location: BuildArtifactsBucket
+        Location: !Ref BuildArtifactsBucket
         Type: S3
-      Name: "${ServiceName}_pipeline"
-      RoleArn: PipelineExecutionRole.Arn
+      Name: !Sub "${ServiceName}_pipeline"
+      RoleArn: !GetAtt PipelineExecutionRole.Arn
       Stages: 
         - 
           Actions: 
@@ -177,9 +177,9 @@ Resources:
                 Version: 1
               Configuration: 
                 Branch: master
-                OAuthToken: GitHubToken
-                Owner: RepositoryOwnerName
-                Repo: RepositoryName
+                OAuthToken: !Sub GitHubToken
+                Owner: !Sub RepositoryOwnerName
+                Repo: !Sub RepositoryName
               Name: GitHubRepo
               OutputArtifacts: 
                 - 
@@ -195,7 +195,7 @@ Resources:
                 Provider: CodeBuild
                 Version: 1
               Configuration: 
-                ProjectName: CodeBuildBetaProject
+                ProjectName: !Ref CodeBuildBetaProject
               InputArtifacts: 
                 - 
                   Name: SourceZip
@@ -213,11 +213,11 @@ Resources:
               Configuration: 
                 ActionMode: CHANGE_SET_REPLACE
                 Capabilities: CAPABILITY_IAM
-                ChangeSetName: "${ServiceName}-ChangeSet-Beta"
+                ChangeSetName: !Sub '${ServiceName}-ChangeSet-Beta'
                 ParameterOverrides: "{ \"SourceBucket\" : { \"Fn::GetArtifactAtt\" : [\"BetaBuiltZip\", \"BucketName\"]}, \"SourceArtifact\" : { \"Fn::GetArtifactAtt\" : [\"BetaBuiltZip\", \"ObjectKey\"]} }"
-                RoleArn: CloudFormationExecutionRole.Arn
-                StackName: "${ServiceName}-Stack-Beta"
-                TemplatePath: "BetaBuiltZip::app-output_sam.yaml"
+                RoleArn: !GetAtt CloudFormationExecutionRole.Arn
+                StackName: !Sub '${ServiceName}-Stack-Beta'
+                TemplatePath: !Sub 'BetaBuiltZip::app-output_sam.yaml'
               InputArtifacts: 
                 - 
                   Name: BetaBuiltZip
@@ -231,13 +231,13 @@ Resources:
                 Version: 1
               Configuration: 
                 ActionMode: CHANGE_SET_EXECUTE
-                ChangeSetName: "${ServiceName}-ChangeSet-Beta"
-                RoleArn: CloudFormationExecutionRole.Arn
-                StackName: "${ServiceName}-Stack-Beta"
+                ChangeSetName: !Sub '${ServiceName}-ChangeSet-Beta'
+                RoleArn: !GetAtt CloudFormationExecutionRole.Arn
+                StackName: !Sub '${ServiceName}-Stack-Beta'
               Name: ExecuteChangeSet
               OutputArtifacts: 
                 - 
-                  Name: "${ServiceName}BetaChangeSet"
+                  Name: !Sub '${ServiceName}BetaChangeSet'
               RunOrder: 3
           Name: Beta
         - 
@@ -249,7 +249,7 @@ Resources:
                 Provider: CodeBuild
                 Version: 1
               Configuration: 
-                ProjectName: CodeBuildGammaProject
+                ProjectName: !Ref CodeBuildGammaProject
               InputArtifacts: 
                 - 
                   Name: SourceZip
@@ -267,10 +267,10 @@ Resources:
               Configuration: 
                 ActionMode: CHANGE_SET_REPLACE
                 Capabilities: CAPABILITY_IAM
-                ChangeSetName: "${ServiceName}-ChangeSet-Gamma"
+                ChangeSetName: !Sub '${ServiceName}-ChangeSet-Gamma'
                 ParameterOverrides: "{ \"SourceBucket\" : { \"Fn::GetArtifactAtt\" : [\"GammaBuiltZip\", \"BucketName\"]}, \"SourceArtifact\" : { \"Fn::GetArtifactAtt\" : [\"GammaBuiltZip\", \"ObjectKey\"]} }"
-                RoleArn: CloudFormationExecutionRole.Arn
-                StackName: "${ServiceName}-Stack-Gamma"
+                RoleArn: !GetAtt CloudFormationExecutionRole.Arn
+                StackName: !Sub '${ServiceName}-Stack-Gamma'
                 TemplatePath: "GammaBuiltZip::app-output_sam.yaml"
               InputArtifacts: 
                 - 
@@ -285,13 +285,13 @@ Resources:
                 Version: 1
               Configuration: 
                 ActionMode: CHANGE_SET_EXECUTE
-                ChangeSetName: "${ServiceName}-ChangeSet-Gamma"
-                RoleArn: CloudFormationExecutionRole.Arn
-                StackName: "${ServiceName}-Stack-Gamma"
+                ChangeSetName: !Sub '${ServiceName}-ChangeSet-Gamma'
+                RoleArn: !GetAtt CloudFormationExecutionRole.Arn
+                StackName: !Sub '${ServiceName}-Stack-Gamma'
               Name: ExecuteChangeSet
               OutputArtifacts: 
                 - 
-                  Name: "${ServiceName}GammaChangeSet"
+                  Name: !Sub '${ServiceName}GammaChangeSet'
               RunOrder: 3
           Name: Gamma
         - 
@@ -311,7 +311,7 @@ Resources:
                 Provider: CodeBuild
                 Version: 1
               Configuration: 
-                ProjectName: CodeBuildProdProject
+                ProjectName: !Ref CodeBuildProdProject
               InputArtifacts: 
                 - 
                   Name: SourceZip
@@ -329,10 +329,10 @@ Resources:
               Configuration: 
                 ActionMode: CHANGE_SET_REPLACE
                 Capabilities: CAPABILITY_IAM
-                ChangeSetName: "${ServiceName}-ChangeSet-Prod"
+                ChangeSetName: !Sub '${ServiceName}-ChangeSet-Prod'
                 ParameterOverrides: "{ \"SourceBucket\" : { \"Fn::GetArtifactAtt\" : [\"ProdBuiltZip\", \"BucketName\"]}, \"SourceArtifact\" : { \"Fn::GetArtifactAtt\" : [\"ProdBuiltZip\", \"ObjectKey\"]} }"
-                RoleArn: CloudFormationExecutionRole.Arn
-                StackName: "${ServiceName}-Stack-Prod"
+                RoleArn: !GetAtt CloudFormationExecutionRole.Arn
+                StackName: !Sub '${ServiceName}-Stack-Prod'
                 TemplatePath: "ProdBuiltZip::app-output_sam.yaml"
               InputArtifacts: 
                 - 
@@ -347,13 +347,13 @@ Resources:
                 Version: 1
               Configuration: 
                 ActionMode: CHANGE_SET_EXECUTE
-                ChangeSetName: "${ServiceName}-ChangeSet-Prod"
-                RoleArn: CloudFormationExecutionRole.Arn
-                StackName: "${ServiceName}-Stack-Prod"
+                ChangeSetName: !Sub '${ServiceName}-ChangeSet-Prod'
+                RoleArn: !GetAtt CloudFormationExecutionRole.Arn
+                StackName: !Sub '${ServiceName}-Stack-Prod'
               Name: ExecuteChangeSet
               OutputArtifacts: 
                 - 
-                  Name: "${ServiceName}ProdChangeSet"
+                  Name: !Sub '${ServiceName}ProdChangeSet'
               RunOrder: 4
           Name: Prod
     Type: "AWS::CodePipeline::Pipeline"
@@ -372,7 +372,7 @@ Resources:
       ManagedPolicyArns: 
         - "arn:aws:iam::aws:policy/AWSCodeCommitFullAccess"
         - "arn:aws:iam::aws:policy/AmazonS3FullAccess"
-        - CFNPipelinePolicy
+        - !Ref CFNPipelinePolicy
       Path: /
       Policies: 
         - 

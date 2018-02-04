@@ -6,8 +6,8 @@ const stage = process.argv[2]
 
 const STACKS = [
     {
-        "StackName": "MyService-Stack-" + stage,
-        "ConfigName": "MY_SERVICE",
+        "StackName": "FrontendAWSCI-Stack-" + stage,
+        "ConfigName": "FrontendAWSCI",
         "Vars": [ "ApiUrl", "CognitoUserPoolId", "CognitoUserPoolClientId" ]
     }
 ]
